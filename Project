@@ -1,0 +1,114 @@
+import sklearn
+import numpy as np
+from scipy.linalg import khatri_rao
+from sklearn.svm import LinearSVC
+import itertools
+
+# You are allowed to import any submodules of sklearn that learn linear models e.g. sklearn.svm etc
+# You are not allowed to use other libraries such as keras, tensorflow etc
+# You are not allowed to use any scipy routine other than khatri_rao
+
+# SUBMIT YOUR CODE AS A SINGLE PYTHON (.PY) FILE INSIDE A ZIP ARCHIVE
+# THE NAME OF THE PYTHON FILE MUST BE submit.py
+
+# DO NOT CHANGE THE NAME OF THE METHODS my_fit, my_map, my_decode etc BELOW
+# THESE WILL BE INVOKED BY THE EVALUATION SCRIPT. CHANGING THESE NAMES WILL CAUSE EVALUATION FAILURE
+
+# You may define any new functions, variables, classes here
+# For example, functions to calculate next coordinate or step length
+
+################################
+# Non Editable Region Starting #
+################################
+def my_map(X):
+    ################################
+    #  Non Editable Region Ending  #
+    ################################
+
+    # Use this method to create features.
+    # It is likely that my_fit will internally call my_map to create features for train points
+   
+    def interaction_terms(X_bin, order, limit=None):
+        features = []
+        combos = itertools.combinations(range(X_bin.shape[1]), order)
+        for idx, indices in enumerate(combos):
+            prod = np.prod(X_bin[:, list(indices)], axis=1).reshape(-1, 1)
+            features.append(prod)
+            if limit and idx + 1 >= limit:
+                break
+        return features
+
+    X_sign = 1 - 2 * X  # Convert {0,1} to {1,-1}
+    base = [X_sign]
+    base += interaction_terms(X_sign, 2)
+    base += interaction_terms(X_sign, 3, limit=30)
+    base += interaction_terms(X_sign, 4, limit=24)
+
+    return np.hstack(base)
+
+################################
+# Non Editable Region Starting #
+################################
+def my_fit(X_train, y_train):
+    ################################
+    #  Non Editable Region Ending  #
+    ################################
+
+    # Use this method to train your models using training CRPs
+    # X_train has 8 columns containing the challenge bits
+    # y_train contains the values for responses
+
+    # THE RETURNED MODEL SHOULD BE ONE VECTOR AND ONE BIAS TERM
+    # If you do not wish to use a bias term, set it to 0
+
+
+    def train_linear_model(X, y):
+        model = LinearSVC(C=1.0, tol=1e-3, max_iter=10000,
+                          loss='hinge', penalty='l2', dual=True)
+        model.fit(X, y)
+        return model
+
+    features = my_map(X_train)
+    model = train_linear_model(features, y_train)
+    return model.coef_.flatten(), model.intercept_[0]
+
+
+################################
+# Non Editable Region Starting #
+################################
+def my_decode(w):
+    ################################
+    #  Non Editable Region Ending  #
+    ################################
+
+    # Use this method to invert a PUF linear model to get back delays
+    # w is a single 65-dim vector (last dimension being the bias term)
+    # The output should be four 64-dimensional vectors
+
+    def construct_delays(w_vec, bias):
+        p = np.zeros(64)
+        p[0] = 2.000000002 * w_vec[0]
+        for i in range(1, 63):
+            p[i] = 2.000000002 * w_vec[i] - p[i - 1]
+        p[63] = w_vec[63] + bias - 0.5 * p[62]
+        return p
+
+    def ensure_non_negative(*arrays):
+        stacked = np.concatenate(arrays)
+        min_val = np.min(stacked)
+        if min_val < 0:
+            shift = -min_val
+            return [arr + shift for arr in arrays]
+        return arrays
+
+    w = np.asarray(w, dtype=np.float64).flatten()
+    main_weights = w[:-1]
+    bias_term = w[-1]
+
+    p = construct_delays(main_weights, bias_term)
+    q = np.zeros(64)
+    r = np.zeros(64); r[-1] = p[-1] - 2 * bias_term
+    s = np.zeros(64)
+
+    p, q, r, s = ensure_non_negative(p, q, r, s)
+    return p, q, r, s
