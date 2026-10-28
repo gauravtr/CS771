@@ -91,7 +91,7 @@ def xor_feature_map(X, interaction_degree=2, max_dim=136):
     """
     base = arbiter_feature_map(X)  # (n_samples, n_stages)
     poly = PolynomialFeatures(
-        degree=interaction_degree, interaction_only=True, include_bias=False
+        degree=interaction_degree, interaction_only=True, include_bias=False  ""generate interactions involving up to two different features.""
     )
     expanded = poly.fit_transform(base)
 
